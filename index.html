@@ -42,12 +42,17 @@ canvas {
   background: #0b1530;
   border: 2px solid #1a3560;
   padding: 12px 14px 14px;
-  transition: border-color 0.3s, box-shadow 0.3s;
+  transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
 }
-.player-panel.active {
-  border-color: #e0187f;
-  box-shadow: 0 0 16px rgba(224,24,127,0.45), inset 0 0 12px rgba(224,24,127,0.08);
-  background: #0f1838;
+#panel1.active {
+  border-color: #00e5cc;
+  box-shadow: 0 0 16px rgba(0,229,204,0.5), inset 0 0 14px rgba(0,229,204,0.1);
+  background: #0a1e20;
+}
+#panel2.active {
+  border-color: #ff4da6;
+  box-shadow: 0 0 16px rgba(255,77,166,0.5), inset 0 0 14px rgba(255,77,166,0.1);
+  background: #1a0f1e;
 }
 #center-panel {
   width: 196px;
@@ -394,6 +399,30 @@ function playTankExplosion() {
   osc.connect(og); og.connect(ac.destination);
   osc.start(); osc.stop(ac.currentTime + 0.35);
 }
+let lastClickTime = 0;
+function playSliderClick() {
+  const now = performance.now();
+  if (now - lastClickTime < 55) return; // throttle ~18/sec max
+  lastClickTime = now;
+  const ac = getAudioCtx();
+  const buf = ac.createBuffer(1, ac.sampleRate * 0.03, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / ac.sampleRate;
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 80) * 0.55;
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const filter = ac.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 1200 + Math.random() * 600;
+  filter.Q.value = 2;
+  const gain = ac.createGain();
+  gain.gain.value = 0.4;
+  src.connect(filter); filter.connect(gain); gain.connect(ac.destination);
+  src.start();
+}
+
 function playMiss() {
   const ac = getAudioCtx();
   const osc = ac.createOscillator();
@@ -414,6 +443,7 @@ let terrain, tanks, projectile, currentPlayer, gameOver, wind;
 let animId = null;
 let stars = [];
 let windParticles = [];
+let explosions = [];
 let turnCount = 0;
 let stats = [
   { shots: 0, hits: 0, damage: 0 },
@@ -450,6 +480,7 @@ function initGame() {
   currentPlayer = 0;
   turnCount = 0;
   windParticles = [];
+  explosions = [];
   stats = [{ shots: 0, hits: 0, damage: 0 }, { shots: 0, hits: 0, damage: 0 }];
 
   stars = Array.from({ length: 55 }, () => ({
@@ -461,8 +492,8 @@ function initGame() {
 
   const x1 = 80, x2 = W - 80;
   tanks = [
-    { x: x1, y: terrainY(x1) - TANK_H, hp: 100, color: '#00e5cc', id: 0 },
-    { x: x2, y: terrainY(x2) - TANK_H, hp: 100, color: '#ff4da6', id: 1 }
+    { x: x1, y: terrainY(x1) - TANK_H, hp: 100, color: '#00e5cc', id: 0, vy: 0, falling: false },
+    { x: x2, y: terrainY(x2) - TANK_H, hp: 100, color: '#ff4da6', id: 1, vy: 0, falling: false }
   ];
 
   document.getElementById('fire-btn').disabled = false;
@@ -519,39 +550,153 @@ function destroyTerrain(cx, cy, radius) {
 
 // --- Wind particles ---
 function tickWindParticles() {
-  const spawnProb = 0.25 + Math.min(Math.abs(wind) * 0.45, 0.65);
-  if (Math.random() < spawnProb && Math.abs(wind) > 0.05) {
+  const abs = Math.abs(wind);
+  if (abs > 0.05 && Math.random() < 0.45 + abs * 0.35) {
     const fromLeft = wind > 0;
+    // Mix edge spawns (60%) with mid-screen spawns (40%) so sky always looks active
+    const edgeSpawn = Math.random() < 0.6;
+    const x = edgeSpawn
+      ? (fromLeft ? -Math.random() * 20 : W + Math.random() * 20)
+      : (fromLeft ? Math.random() * W * 0.35 : W - Math.random() * W * 0.35);
     windParticles.push({
-      x: fromLeft ? Math.random() * 8 - 8 : W + Math.random() * 8,
-      y: 6 + Math.random() * (H * 0.56),
-      len: 4 + Math.random() * 10,
-      alpha: 0.07 + Math.random() * 0.1,
-      vy: (Math.random() - 0.5) * 0.18
+      x,
+      y: 5 + Math.random() * (H * 0.54),
+      len: 10 + abs * 10 + Math.random() * 10, // length clearly scales with speed
+      alpha: 0.12 + Math.random() * 0.16,
+      vy: (Math.random() - 0.5) * 0.2,
+      spd: Math.abs(wind) * 1.6 + 0.4 + Math.random() * 0.4
     });
   }
   windParticles = windParticles.filter(p => {
-    p.x += wind * 1.4;
+    p.x += (wind > 0 ? 1 : -1) * p.spd;
     p.y += p.vy;
-    p.alpha -= 0.0012;
-    return p.alpha > 0.005 && p.x > -20 && p.x < W + 20;
+    p.alpha -= 0.0015;
+    return p.alpha > 0.005 && p.x > -35 && p.x < W + 35;
   });
-  if (windParticles.length > 100) windParticles.splice(0, windParticles.length - 100);
+  if (windParticles.length > 130) windParticles.splice(0, windParticles.length - 130);
 }
 
 function drawWindParticles() {
   ctx.save();
-  ctx.strokeStyle = '#99bbee';
   ctx.lineWidth = 1;
   windParticles.forEach(p => {
     ctx.globalAlpha = p.alpha;
+    ctx.strokeStyle = '#aaccff';
+    // Tail points opposite to travel direction
+    const tailX = p.x - (wind > 0 ? p.len : -p.len);
     ctx.beginPath();
     ctx.moveTo(Math.round(p.x), Math.round(p.y));
-    ctx.lineTo(Math.round(p.x - wind * p.len * 0.28), Math.round(p.y));
+    ctx.lineTo(Math.round(tailX), Math.round(p.y));
     ctx.stroke();
   });
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+
+// --- Explosion animation system ---
+function startExplosion(ex, ey, hitTank) {
+  const n = hitTank ? 14 : 20;
+  const earthColors = ['#44aa33','#66cc44','#886622','#aa7733','#3a7a28','#557733'];
+  const fireColors  = ['#ff6600','#ff9900','#ffcc00','#ff3300','#ff8800'];
+  const particles = Array.from({length: n}, () => {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 1.2 + Math.random() * (hitTank ? 4 : 3.2);
+    const colors = hitTank ? fireColors : earthColors;
+    return {
+      x: ex, y: ey,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - (hitTank ? 2.5 : 2),
+      sz: hitTank ? 3 + Math.random() * 3 : 2 + Math.random() * 4,
+      col: colors[Math.floor(Math.random() * colors.length)]
+    };
+  });
+  explosions.push({
+    x: ex, y: ey, frame: 0,
+    maxFrames: hitTank ? 28 : 38,
+    maxR: BLAST_RADIUS * (hitTank ? 1.5 : 1.0),
+    hitTank, particles
+  });
+}
+
+function tickExplosions() {
+  explosions.forEach(e => {
+    e.frame++;
+    e.particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.13;
+      p.vx *= 0.97;
+    });
+  });
+  explosions = explosions.filter(e => e.frame < e.maxFrames);
+}
+
+function drawExplosions() {
+  explosions.forEach(e => {
+    const prog = e.frame / e.maxFrames;
+    const expandT = Math.min(prog / 0.45, 1);
+    const fadeT  = Math.max(0, (prog - 0.25) / 0.75);
+    const r = e.maxR * expandT;
+    const alpha = 1 - fadeT;
+
+    if (r > 0.5 && alpha > 0) {
+      ctx.save();
+      const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, r);
+      if (e.hitTank) {
+        g.addColorStop(0,   `rgba(255,255,200,${alpha})`);
+        g.addColorStop(0.3, `rgba(255,160,0,${alpha*0.9})`);
+        g.addColorStop(0.7, `rgba(255,50,0,${alpha*0.55})`);
+        g.addColorStop(1,   'rgba(200,0,0,0)');
+      } else {
+        g.addColorStop(0,   `rgba(255,240,150,${alpha*0.88})`);
+        g.addColorStop(0.35,`rgba(210,110,0,${alpha*0.72})`);
+        g.addColorStop(0.7, `rgba(160,70,0,${alpha*0.38})`);
+        g.addColorStop(1,   'rgba(80,30,0,0)');
+      }
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      // Smoke puff for ground hits
+      if (!e.hitTank && prog > 0.35) {
+        const sr = r * 0.45;
+        const sa = Math.min((prog - 0.35) * 1.2, 1) * alpha * 0.35;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y - sr * 0.5, sr, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(90,85,70,${sa})`;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Debris
+    ctx.save();
+    e.particles.forEach(p => {
+      const pa = Math.max(0, 1 - prog * 1.1);
+      if (pa <= 0) return;
+      ctx.globalAlpha = pa;
+      ctx.fillStyle = p.col;
+      const s = Math.max(1, Math.round(p.sz * (1 - prog * 0.6)));
+      ctx.fillRect(Math.round(p.x) - (s>>1), Math.round(p.y) - (s>>1), s, s);
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  });
+}
+
+// --- Tank fall physics ---
+function stepTankPhysics() {
+  tanks.forEach(t => {
+    if (!t.falling) return;
+    t.vy += 0.22;
+    t.y += t.vy;
+    const floor = terrainY(t.x) - TANK_H;
+    if (t.y >= floor) {
+      t.y = floor;
+      // Small bounce
+      if (Math.abs(t.vy) > 1.5) t.vy = -t.vy * 0.18;
+      else { t.vy = 0; t.falling = false; }
+    }
+  });
 }
 
 // --- Render ---
@@ -576,6 +721,7 @@ function render() {
   drawWindParticles();
   drawTerrain();
   tanks.forEach(t => drawTank(t));
+  drawExplosions();
   if (projectile) drawProjectile();
 }
 
@@ -717,11 +863,13 @@ function drawProjectile() {
   ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 3);
 }
 
-// --- Game loop (always running for particles; also drives physics) ---
+// --- Game loop ---
 function gameLoop() {
   animId = requestAnimationFrame(gameLoop);
   if (projectile) stepPhysics();
+  stepTankPhysics();
   tickWindParticles();
+  tickExplosions();
   render();
 }
 
@@ -792,11 +940,16 @@ function explode(ex, ey, hitTank) {
   projectile = null;
 
   destroyTerrain(ex, ey, BLAST_RADIUS);
+  startExplosion(ex, ey, hitTank);
 
+  // Start tank falls to new terrain level
   for (const t of tanks) {
-    t.y = terrainY(t.x) - TANK_H;
+    const floor = terrainY(t.x) - TANK_H;
+    if (t.y < floor - 2) { t.vy = 0; t.falling = true; }
+    else { t.y = floor; }
   }
 
+  // Damage calculation
   let hit = false;
   for (const t of tanks) {
     if (t.hp <= 0) continue;
@@ -804,48 +957,29 @@ function explode(ex, ey, hitTank) {
     const dist = Math.sqrt(dx * dx + dy * dy);
     let dmg = 0;
     if (dist < 8) {
-      dmg = DIRECT_DAMAGE;
-      stats[shooter].hits++;
+      dmg = DIRECT_DAMAGE; stats[shooter].hits++;
     } else if (dist < BLAST_RADIUS + 20) {
       dmg = Math.round(SPLASH_DAMAGE * (1 - dist / (BLAST_RADIUS + 20)));
       if (dmg > 0) stats[shooter].hits++;
     }
-    if (dmg > 0) {
-      t.hp = Math.max(0, t.hp - dmg);
-      stats[shooter].damage += dmg;
-      hit = true;
+    if (dmg > 0) { t.hp = Math.max(0, t.hp - dmg); stats[shooter].damage += dmg; hit = true; }
+  }
+
+  // Delay post-explosion logic so falls + animation play first
+  const delay = hitTank ? 700 : 900;
+  setTimeout(() => {
+    // Snap any still-falling tanks (edge case)
+    for (const t of tanks) { if (t.falling) { t.y = terrainY(t.x) - TANK_H; t.falling = false; } }
+    updateUI();
+    const dead = tanks.filter(t => t.hp <= 0);
+    if (dead.length > 0) {
+      gameOver = true;
+      setTimeout(() => showWinner(tanks.find(t => t.hp > 0)), 200);
+      return;
     }
-  }
-
-  drawExplosion(ex, ey);
-  updateUI();
-
-  const dead = tanks.filter(t => t.hp <= 0);
-  if (dead.length > 0) {
-    const winner = tanks.find(t => t.hp > 0);
-    gameOver = true;
-    setTimeout(() => {
-      render();
-      showWinner(winner);
-    }, 420);
-    return;
-  }
-
-  setStatus(hit ? 'Hit!' : 'Miss!');
-  setTimeout(() => { endTurn(); }, 300);
-}
-
-function drawExplosion(ex, ey) {
-  ctx.save();
-  const grad = ctx.createRadialGradient(ex, ey, 0, ex, ey, BLAST_RADIUS);
-  grad.addColorStop(0, 'rgba(255,255,200,0.98)');
-  grad.addColorStop(0.35, 'rgba(255,140,0,0.85)');
-  grad.addColorStop(1, 'rgba(255,30,0,0)');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.arc(ex, ey, BLAST_RADIUS, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+    setStatus(hit ? 'Hit!' : 'Miss!');
+    setTimeout(() => endTurn(), 300);
+  }, delay);
 }
 
 function endTurn() {
@@ -916,7 +1050,7 @@ function updateUI() {
   el.addEventListener('input', () => {
     valEl.textContent = id.startsWith('angle') ? el.value + '\u00b0' : el.value;
     setSliderFill(id, isP1);
-    if (!projectile) render();
+    playSliderClick();
   });
 });
 
