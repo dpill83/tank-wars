@@ -79,6 +79,111 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
+// --- Audio ---
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playFire() {
+  const ac = getAudioCtx();
+  const buf = ac.createBuffer(1, ac.sampleRate * 0.25, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / ac.sampleRate;
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 18) * 0.9;
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const filter = ac.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 400;
+  src.connect(filter);
+  filter.connect(ac.destination);
+  src.start();
+}
+
+function playWhistle() {
+  const ac = getAudioCtx();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(900, ac.currentTime);
+  osc.frequency.linearRampToValueAtTime(500, ac.currentTime + 1.5);
+  gain.gain.setValueAtTime(0.18, ac.currentTime);
+  gain.gain.linearRampToValueAtTime(0, ac.currentTime + 1.5);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 1.5);
+}
+
+let whistleOsc = null, whistleGain = null;
+function startWhistle() {
+  const ac = getAudioCtx();
+  whistleOsc = ac.createOscillator();
+  whistleGain = ac.createGain();
+  whistleOsc.type = 'sine';
+  whistleOsc.frequency.setValueAtTime(1000, ac.currentTime);
+  whistleGain.gain.setValueAtTime(0.12, ac.currentTime);
+  whistleOsc.connect(whistleGain);
+  whistleGain.connect(ac.destination);
+  whistleOsc.start();
+}
+function updateWhistle(vy) {
+  if (!whistleOsc) return;
+  const ac = getAudioCtx();
+  const freq = Math.max(300, 1000 - vy * 30);
+  whistleOsc.frequency.setTargetAtTime(freq, ac.currentTime, 0.05);
+}
+function stopWhistle() {
+  if (!whistleOsc) return;
+  const ac = getAudioCtx();
+  whistleGain.gain.setTargetAtTime(0, ac.currentTime, 0.05);
+  whistleOsc.stop(ac.currentTime + 0.1);
+  whistleOsc = null; whistleGain = null;
+}
+
+function playExplosion() {
+  const ac = getAudioCtx();
+  const dur = 0.8;
+  const buf = ac.createBuffer(1, ac.sampleRate * dur, ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const t = i / ac.sampleRate;
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 6) * 1.0;
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const filter = ac.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 250;
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(1.0, ac.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(ac.destination);
+  src.start();
+}
+
+function playMiss() {
+  const ac = getAudioCtx();
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(300, ac.currentTime);
+  osc.frequency.linearRampToValueAtTime(80, ac.currentTime + 0.4);
+  gain.gain.setValueAtTime(0.15, ac.currentTime);
+  gain.gain.linearRampToValueAtTime(0, ac.currentTime + 0.4);
+  osc.connect(gain);
+  gain.connect(ac.destination);
+  osc.start();
+  osc.stop(ac.currentTime + 0.4);
+}
+
 // --- State ---
 let terrain, tanks, projectile, currentPlayer, gameOver, wind;
 let animId = null;
@@ -286,7 +391,7 @@ function fire() {
   const angleEl = currentPlayer === 0 ? document.getElementById('angle1') : document.getElementById('angle2');
   const powerEl = currentPlayer === 0 ? document.getElementById('power1') : document.getElementById('power2');
   const angle = parseFloat(angleEl.value) * Math.PI / 180;
-  const power = parseFloat(powerEl.value) * 0.22;
+  const power = parseFloat(powerEl.value) * 0.10;
 
   projectile = {
     x: t.x + Math.cos(angle) * BARREL_LEN,
@@ -298,6 +403,8 @@ function fire() {
 
   document.getElementById('fire-btn').disabled = true;
   setStatus('Projectile in flight...');
+  playFire();
+  startWhistle();
   loop();
 }
 
@@ -318,6 +425,7 @@ function stepPhysics() {
   p.vx += wind * 0.01;
   p.x += p.vx;
   p.y += p.vy;
+  updateWhistle(p.vy);
 
   // Hit terrain
   if (p.y >= terrainY(p.x)) {
@@ -327,6 +435,8 @@ function stepPhysics() {
 
   // Out of bounds
   if (p.x < -50 || p.x > W + 50 || p.y > H + 50) {
+    stopWhistle();
+    playMiss();
     projectile = null;
     cancelAnimationFrame(animId);
     animId = null;
@@ -348,6 +458,8 @@ function stepPhysics() {
 }
 
 function explode(ex, ey) {
+  stopWhistle();
+  playExplosion();
   cancelAnimationFrame(animId);
   animId = null;
   projectile = null;
