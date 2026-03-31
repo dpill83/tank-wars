@@ -919,29 +919,67 @@ function drawTrajectoryPreview() {
   const powerEl = currentPlayer === 0 ? document.getElementById('power1') : document.getElementById('power2');
   const angle = parseFloat(angleEl.value) * Math.PI / 180;
   const power = parseFloat(powerEl.value) * 0.09;
-  let px = t.x + Math.cos(angle) * BARREL_LEN;
-  let py = (t.y - 5) - Math.sin(angle) * BARREL_LEN;
-  let vx = Math.cos(angle) * power;
-  let vy = -Math.sin(angle) * power;
   const col = t.color;
-  ctx.save();
-  ctx.setLineDash([4, 6]);
-  ctx.strokeStyle = col;
-  ctx.globalAlpha = 0.35;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  for (let i = 0; i < 220; i++) {
-    vy += GRAVITY;
-    vx += wind * 0.01;
-    px += vx;
-    py += vy;
-    if (px < -10 || px > W + 10 || py > H + 10) break;
-    if (py >= terrainY(px)) break;
-    ctx.lineTo(px, py);
+  const sx = t.x + Math.cos(angle) * BARREL_LEN;
+  const sy = (t.y - 5) - Math.sin(angle) * BARREL_LEN;
+
+  function simulate(mult) {
+    const pts = [{ x: sx, y: sy }];
+    let px = sx, py = sy;
+    let vx = Math.cos(angle) * power * mult;
+    let vy = -Math.sin(angle) * power * mult;
+    for (let i = 0; i < 280; i++) {
+      vy += GRAVITY; vx += wind * 0.01;
+      px += vx; py += vy;
+      if (px < -10 || px > W + 10 || py > H + 10) break;
+      if (py >= terrainY(px)) break;
+      pts.push({ x: px, y: py });
+    }
+    return pts;
   }
-  ctx.stroke();
-  ctx.setLineDash([]);
+
+  const center = simulate(1.0);
+  const lo     = simulate(0.9);
+  const hi     = simulate(1.1);
+  const total  = center.length;
+
+  ctx.save();
+
+  // — Center arc: dashed, full alpha at start → 0 at end —
+  for (let i = 1; i < total; i++) {
+    const prog  = i / total;
+    const alpha = Math.pow(1 - prog, 1.4) * 0.65;
+    if (alpha < 0.01) continue;
+    // Skip every 3rd pair of steps for dashed look
+    if (Math.floor(i / 3) % 2 === 1) continue;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(center[i - 1].x, center[i - 1].y);
+    ctx.lineTo(center[i].x,     center[i].y);
+    ctx.stroke();
+  }
+
+  // — Cone edges: invisible at start, grow visible toward landing —
+  const coneStart = 0.35; // edges only appear after 35% of arc
+  [lo, hi].forEach(pts => {
+    const n = pts.length;
+    for (let i = 1; i < n; i++) {
+      const prog = i / n;
+      if (prog < coneStart) continue;
+      const alpha = Math.pow((prog - coneStart) / (1 - coneStart), 1.6) * 0.28;
+      if (alpha < 0.01) continue;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+      ctx.lineTo(pts[i].x,     pts[i].y);
+      ctx.stroke();
+    }
+  });
+
   ctx.globalAlpha = 1;
   ctx.restore();
 }
