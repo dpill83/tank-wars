@@ -916,7 +916,7 @@ function drawTrajectoryPreview() {
   const angleEl = currentPlayer === 0 ? document.getElementById('angle1') : document.getElementById('angle2');
   const powerEl = currentPlayer === 0 ? document.getElementById('power1') : document.getElementById('power2');
   const angle = parseFloat(angleEl.value) * Math.PI / 180;
-  const power = parseFloat(powerEl.value) * 0.06;
+  const power = parseFloat(powerEl.value) * 0.09;
   let px = t.x + Math.cos(angle) * BARREL_LEN;
   let py = (t.y - 5) - Math.sin(angle) * BARREL_LEN;
   let vx = Math.cos(angle) * power;
@@ -1007,7 +1007,7 @@ function fire() {
   const angleEl = currentPlayer === 0 ? document.getElementById('angle1') : document.getElementById('angle2');
   const powerEl = currentPlayer === 0 ? document.getElementById('power1') : document.getElementById('power2');
   const angle = parseFloat(angleEl.value) * Math.PI / 180;
-  const power = parseFloat(powerEl.value) * 0.06;
+  const power = parseFloat(powerEl.value) * 0.09;
 
   projectile = {
     x: t.x + Math.cos(angle) * BARREL_LEN,
