@@ -352,7 +352,9 @@ function startWhistle() {
 function updateWhistle(vy) {
   if (!whistleOsc) return;
   const ac = getAudioCtx();
-  whistleOsc.frequency.setTargetAtTime(Math.max(300, 1000 - vy * 30), ac.currentTime, 0.05);
+  // vy < 0 = rising → high pitch; vy > 0 = falling → low pitch
+  const freq = Math.max(180, Math.min(2600, 1400 - vy * 100));
+  whistleOsc.frequency.setTargetAtTime(freq, ac.currentTime, 0.04);
 }
 function stopWhistle() {
   if (!whistleOsc) return;
@@ -1009,11 +1011,13 @@ function fire() {
   const angle = parseFloat(angleEl.value) * Math.PI / 180;
   const power = parseFloat(powerEl.value) * 0.09;
 
+  // ±10% scatter so the actual shot drifts slightly from the preview arc
+  const scatter = 0.9 + Math.random() * 0.2;
   projectile = {
     x: t.x + Math.cos(angle) * BARREL_LEN,
     y: (t.y - 5) - Math.sin(angle) * BARREL_LEN,
-    vx: Math.cos(angle) * power,
-    vy: -Math.sin(angle) * power,
+    vx: Math.cos(angle) * power * scatter,
+    vy: -Math.sin(angle) * power * scatter,
     trail: []
   };
 
