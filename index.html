@@ -1554,6 +1554,12 @@ function fire() {
   const sx = t.x + Math.cos(angle) * BARREL_LEN;
   const sy = (t.y - 5) - Math.sin(angle) * BARREL_LEN;
 
+  if (ammoType !== 'standard') {
+    if (ammoInventory[ammoType] <= 0) return; // guard
+    ammoInventory[ammoType]--;
+  }
+  updateAmmoBtn();
+
   stats[currentPlayer].shots++;
   document.getElementById('fire-btn').disabled = true;
   playFire();
@@ -1840,7 +1846,7 @@ function showWinner(winner) {
     updateRoundPips();
   }
 
-  if (winner && roundWins[winner.id] >= ROUNDS_TO_WIN) {
+  if (winner && roundWins[winner.id] >= roundsToWin) {
     // Champion — show final overlay
     cancelAnimationFrame(animId); animId = null;
     const name = `PLAYER ${winner.id + 1} WINS!`;
@@ -1916,14 +1922,20 @@ function updateUI() {
 function cycleAmmo() {
   if (projectile || subProjectiles.length > 0 || gameOver) return;
   const types = ['standard', 'cluster', 'heavy', 'ricochet'];
-  ammoType = types[(types.indexOf(ammoType) + 1) % types.length];
+  let idx = types.indexOf(ammoType);
+  for (let i = 0; i < types.length; i++) {
+    idx = (idx + 1) % types.length;
+    const t = types[idx];
+    if (ammoInventory[t] === Infinity || ammoInventory[t] > 0) { ammoType = t; break; }
+  }
   updateAmmoBtn();
 }
 function updateAmmoBtn() {
-  const labels = { standard: 'AMMO: STD', cluster: 'AMMO: CLSTR', heavy: 'AMMO: HEAVY', ricochet: 'AMMO: RICO' };
+  const labels = { standard: 'STD ∞', cluster: `CLSTR ${ammoInventory.cluster}`, heavy: `HEAVY ${ammoInventory.heavy}`, ricochet: `RICO ${ammoInventory.ricochet}` };
   const colors = { standard: '#ffaa22', cluster: '#44ddff', heavy: '#ff5533', ricochet: '#cc44ff' };
   const btn = document.getElementById('ammo-btn');
-  btn.textContent = labels[ammoType];
+  if (!btn) return;
+  btn.textContent = 'AMMO: ' + labels[ammoType];
   btn.style.color = colors[ammoType];
   btn.style.borderColor = colors[ammoType] + '66';
 }
@@ -1952,7 +1964,7 @@ function updateRoundPips() {
   [0, 1].forEach(i => {
     const el = document.getElementById(`pips${i + 1}`);
     el.innerHTML = '';
-    for (let r = 0; r < ROUNDS_TO_WIN; r++) {
+    for (let r = 0; r < roundsToWin; r++) {
       const pip = document.createElement('span');
       pip.className = 'round-pip ' + (r < roundWins[i] ? 'won' : 'empty');
       el.appendChild(pip);
@@ -1970,25 +1982,26 @@ function toggleCpu() {
 
 function cpuTakeTurn() {
   if (gameOver) return;
-  setStatus('CPU aiming...');
+  const lvl = CPU_LEVELS[cpuLevel] || CPU_LEVELS[0];
+  setStatus(`${lvl.name} aiming...`);
   setTimeout(() => {
     if (gameOver) return;
     const me = tanks[1];
     const target = tanks[0];
-
-    // Try powers 50-90, angles 10-170, pick combo with min approach dist
     let bestAngle = 135, bestPower = 70, bestDist = Infinity;
-    for (let pct = 50; pct <= 90; pct += 10) {
-      const power = pct * 0.09;
-      for (let deg = 10; deg <= 170; deg += 3) {
+    for (let pct = 45; pct <= 95; pct += 10) {
+      // Apply wind factor: higher levels compensate for wind better
+      const effectiveWind = wind * lvl.windFactor;
+      for (let deg = 10; deg <= 170; deg += 2) {
         const angle = deg * Math.PI / 180;
+        const power = pct * 0.09;
         let px = me.x + Math.cos(angle) * BARREL_LEN;
         let py = (me.y - 5) - Math.sin(angle) * BARREL_LEN;
         let vx = Math.cos(angle) * power;
         let vy = -Math.sin(angle) * power;
         let minD = Infinity;
         for (let i = 0; i < 400; i++) {
-          vy += GRAVITY; vx += wind * 0.01;
+          vy += GRAVITY; vx += effectiveWind * 0.01;
           px += vx; py += vy;
           if (px < -20 || px > W + 20 || py > H + 20) break;
           if (py >= terrainY(px)) break;
@@ -1998,26 +2011,158 @@ function cpuTakeTurn() {
         if (minD < bestDist) { bestDist = minD; bestAngle = deg; bestPower = pct; }
       }
     }
-
-    // Add noise scaled to distance from perfect aim
-    const noiseDeg = bestAngle + (Math.random() * 22 - 11);
-    const noisePwr = bestPower + (Math.random() * 14 - 7);
-    const finalDeg = Math.max(10, Math.min(170, Math.round(noiseDeg)));
-    const finalPwr = Math.max(5, Math.min(100, Math.round(noisePwr)));
-
+    // Apply noise based on difficulty
+    const noise = lvl.noise;
+    const finalDeg = Math.max(10, Math.min(170, Math.round(bestAngle + (Math.random()*noise*2 - noise))));
+    const finalPwr = Math.max(5, Math.min(100, Math.round(bestPower + (Math.random()*noise - noise/2))));
     document.getElementById('angle2').value = finalDeg;
     document.getElementById('angle2val').textContent = finalDeg + '°';
     setSliderFill('angle2', false);
     document.getElementById('power2').value = finalPwr;
     document.getElementById('power2val').textContent = finalPwr;
     setSliderFill('power2', false);
+    setTimeout(() => { if (!gameOver) fire(); }, 600);
+  }, 1200);
+}
 
-    setTimeout(() => { if (!gameOver) fire(); }, 500);
-  }, 1000);
+// --- Title screen ---
+let titleAnimId = null;
+let titleParticles = [];
+
+function startTitleScreen() {
+  const tc = document.getElementById('tc');
+  const tctx = tc.getContext('2d');
+  const TW = tc.width, TH = tc.height;
+
+  function titleLoop() {
+    titleAnimId = requestAnimationFrame(titleLoop);
+    // Sky - split gradient
+    const skyL = tctx.createLinearGradient(0,0,0,TH);
+    skyL.addColorStop(0,'#1a0800'); skyL.addColorStop(0.6,'#cc3300'); skyL.addColorStop(1,'#ff6600');
+    tctx.fillStyle = skyL; tctx.fillRect(0, 0, TW*0.45, TH);
+    const skyR = tctx.createLinearGradient(0,0,0,TH);
+    skyR.addColorStop(0,'#0a0a00'); skyR.addColorStop(0.5,'#3a4400'); skyR.addColorStop(1,'#778800');
+    tctx.fillStyle = skyR; tctx.fillRect(TW*0.45, 0, TW*0.55, TH);
+    // Yellow beam in centre
+    const beam = tctx.createLinearGradient(TW*0.38,0,TW*0.62,0);
+    beam.addColorStop(0,'rgba(255,255,0,0)'); beam.addColorStop(0.3,'rgba(255,255,100,0.35)');
+    beam.addColorStop(0.5,'rgba(255,255,180,0.55)'); beam.addColorStop(0.7,'rgba(255,255,100,0.35)');
+    beam.addColorStop(1,'rgba(255,255,0,0)');
+    tctx.fillStyle = beam; tctx.fillRect(0,0,TW,TH);
+    // Spawn particles
+    if (Math.random() < 0.6) {
+      const cols = ['#ffff00','#ffcc00','#ff8800','#ff4400','#ffff88'];
+      titleParticles.push({ x: TW*0.5+(Math.random()-0.5)*30, y: TH*0.78,
+        vx:(Math.random()-0.5)*2.5, vy:-(3+Math.random()*5),
+        col:cols[Math.floor(Math.random()*cols.length)], alpha:1, r:2+Math.random()*3 });
+    }
+    // Tick + draw particles
+    tctx.save();
+    titleParticles = titleParticles.filter(p => {
+      p.vy += 0.08; p.x += p.vx; p.y += p.vy; p.alpha -= 0.012;
+      if (p.alpha <= 0) return false;
+      tctx.globalAlpha = p.alpha;
+      tctx.fillStyle = p.col;
+      tctx.beginPath(); tctx.arc(p.x, p.y, p.r, 0, Math.PI*2); tctx.fill();
+      return true;
+    });
+    tctx.globalAlpha = 1; tctx.restore();
+    // Green hills silhouette
+    tctx.fillStyle = '#1a5500';
+    tctx.beginPath(); tctx.moveTo(0,TH);
+    tctx.bezierCurveTo(TW*0.1,TH*0.72, TW*0.25,TH*0.68, TW*0.38,TH*0.78);
+    tctx.bezierCurveTo(TW*0.5,TH*0.88, TW*0.6,TH*0.82, TW*0.7,TH*0.75);
+    tctx.bezierCurveTo(TW*0.82,TH*0.68, TW*0.92,TH*0.74, TW,TH*0.78);
+    tctx.lineTo(TW,TH); tctx.closePath(); tctx.fill();
+    tctx.fillStyle = '#22aa00';
+    tctx.beginPath(); tctx.moveTo(0,TH);
+    tctx.bezierCurveTo(TW*0.08,TH*0.82, TW*0.18,TH*0.78, TW*0.3,TH*0.85);
+    tctx.bezierCurveTo(TW*0.42,TH*0.92, TW*0.52,TH*0.88, TW*0.65,TH*0.83);
+    tctx.bezierCurveTo(TW*0.78,TH*0.78, TW*0.9,TH*0.84, TW,TH*0.88);
+    tctx.lineTo(TW,TH); tctx.closePath(); tctx.fill();
+    // Simple pixel tank silhouette bottom-left
+    tctx.fillStyle = '#111';
+    tctx.fillRect(30, TH*0.83, 90, 28); // treads
+    tctx.fillRect(44, TH*0.83-18, 62, 20); // body
+    tctx.fillRect(55, TH*0.83-32, 36, 16); // turret
+    tctx.fillRect(84, TH*0.83-28, 40, 8); // barrel
+  }
+  titleLoop();
+}
+
+function enterTitleScreen() {
+  if (titleAnimId) { cancelAnimationFrame(titleAnimId); titleAnimId = null; }
+  document.getElementById('title-screen').style.display = 'none';
+  showSetupScreen();
+}
+
+// --- Setup screen ---
+function showSetupScreen() {
+  document.getElementById('setup-screen').classList.add('show');
+  refreshSetupUI();
+}
+function refreshSetupUI() {
+  setupConfig.players.forEach((p, i) => {
+    const btn = document.getElementById(`spt${i}`);
+    btn.textContent = p.type === 'human' ? 'HUMAN' : 'CPU';
+    btn.classList.toggle('is-cpu', p.type === 'cpu');
+    const row = document.getElementById(`scpu-row${i}`);
+    row.style.display = p.type === 'cpu' ? 'flex' : 'none';
+    document.getElementById(`scpu-name${i}`).textContent = CPU_LEVELS[p.cpuLvl].name;
+  });
+  const themeNames = ['GRASS','DESERT','ARCTIC'];
+  document.getElementById('sopt-theme').textContent = themeNames[setupConfig.theme];
+  const roundLabels = ['1 ROUND','BEST OF 3','BEST OF 5'];
+  document.getElementById('sopt-rounds').textContent = roundLabels[setupConfig.rounds];
+  document.getElementById('sopt-timer').textContent = setupConfig.timer ? 'ON' : 'OFF';
+  document.getElementById('sopt-sound').textContent = setupConfig.sound ? 'ON' : 'OFF';
+}
+function toggleSetupPlayer(i) {
+  setupConfig.players[i].type = setupConfig.players[i].type === 'human' ? 'cpu' : 'human';
+  refreshSetupUI();
+}
+function changeSetupCpuLvl(i, dir) {
+  setupConfig.players[i].cpuLvl = Math.max(0, Math.min(CPU_LEVELS.length-1, setupConfig.players[i].cpuLvl + dir));
+  refreshSetupUI();
+}
+function cycleSetupOpt(key) {
+  if (key === 'theme') setupConfig.theme = (setupConfig.theme + 1) % 3;
+  else if (key === 'rounds') setupConfig.rounds = (setupConfig.rounds + 1) % 3;
+  else if (key === 'timer') setupConfig.timer = !setupConfig.timer;
+  else if (key === 'sound') setupConfig.sound = !setupConfig.sound;
+  refreshSetupUI();
+}
+function startGameFromSetup() {
+  document.getElementById('setup-screen').classList.remove('show');
+  // Apply setup config to game state
+  terrainTheme = setupConfig.theme;
+  muted = !setupConfig.sound;
+  timerEnabled = setupConfig.timer;
+  // Rounds to win: rounds=0 → 1, rounds=1 → 2(best of 3), rounds=2 → 3(best of 5)
+  const winsNeededMap = [1, 2, 3];
+  roundsToWin = winsNeededMap[setupConfig.rounds];
+  // CPU mode: player[1] is CPU?
+  cpuMode = setupConfig.players[1].type === 'cpu';
+  cpuLevel = setupConfig.players[1].cpuLvl;
+  // Update mute button
+  const muteBtn = document.getElementById('mute-btn');
+  muteBtn.textContent = muted ? 'SFX: OFF' : 'SFX: ON';
+  muteBtn.classList.toggle('muted', muted);
+  initGame();
+}
+
+// --- Menu / goToMenu ---
+function goToMenu() {
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  gameOver = true;
+  document.getElementById('winner-overlay').classList.remove('show');
+  showSetupScreen();
 }
 
 // --- Keyboard shortcuts ---
 document.addEventListener('keydown', e => {
+  if (document.getElementById('title-screen').style.display !== 'none') { enterTitleScreen(); return; }
+  if (document.getElementById('setup-screen').classList.contains('show')) return;
   if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
   if (gameOver) return;
   if (cpuMode && currentPlayer === 1) return; // block input during CPU turn
@@ -2055,7 +2200,8 @@ document.addEventListener('keydown', e => {
   }
 });
 
-initGame();
+startTitleScreen();
+document.getElementById('title-screen').addEventListener('click', enterTitleScreen);
 </script>
 </body>
 </html>
