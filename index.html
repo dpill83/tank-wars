@@ -284,14 +284,211 @@ input[type=range]::-moz-range-thumb {
 #wbtn1:hover { background: rgba(255,77,166,0.12); }
 #wbtn2 { color: #00e5ff; border: 3px solid #00e5ff; box-shadow: 0 0 8px rgba(0,229,255,0.4); }
 #wbtn2:hover { background: rgba(0,229,255,0.1); }
+
+/* Title/options screens */
+.screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(900px 420px at 50% 40%, rgba(170,0,255,0.18), rgba(2,4,14,0.96)),
+              linear-gradient(180deg, rgba(8,12,30,0.2), rgba(8,12,30,0.85));
+  align-items: center;
+  justify-content: center;
+  z-index: 120;
+}
+.screen.show { display: flex; }
+.menu-box {
+  width: 820px;
+  max-width: calc(100vw - 26px);
+  background: rgba(11,21,48,0.72);
+  border: 3px solid #1a3560;
+  box-shadow: 0 0 26px rgba(0,229,255,0.12);
+  padding: 26px 28px 22px;
+}
+.logo {
+  font-size: 3.05rem;
+  letter-spacing: 10px;
+  line-height: 1.05;
+  text-align: center;
+  margin: 2px 0 12px;
+  color: transparent;
+  background: linear-gradient(180deg, #ffe94f 0%, #ffb02e 38%, #ff4a1a 52%, #b9142a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  text-shadow:
+    0 2px 0 #233,
+    0 0 0 #000,
+    0 0 16px rgba(255,205,80,0.26),
+    0 0 34px rgba(255,120,80,0.16);
+}
+.logo-outline {
+  filter: drop-shadow(0 0 0 #0b2) drop-shadow(0 0 0 #0b2);
+  -webkit-text-stroke: 3px rgba(10,170,120,0.72);
+}
+.menu-sub {
+  text-align: center;
+  font-size: 0.48rem;
+  color: #9ab;
+  letter-spacing: 2px;
+  margin-bottom: 18px;
+}
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+  align-items: start;
+}
+.menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+.menu-btn {
+  font-family: inherit;
+  cursor: pointer;
+  border: 3px solid #22ffd2;
+  background: rgba(0,229,204,0.08);
+  color: #eaffff;
+  letter-spacing: 4px;
+  padding: 16px 14px;
+  font-size: 0.86rem;
+  box-shadow: 0 0 18px rgba(0,229,204,0.18);
+}
+.menu-btn.alt {
+  border-color: #ff4da6;
+  background: rgba(255,77,166,0.08);
+  box-shadow: 0 0 18px rgba(255,77,166,0.12);
+}
+.menu-btn.ghost {
+  border-color: #2a4a7a;
+  background: rgba(18,30,56,0.7);
+  box-shadow: none;
+  color: #a8b8d8;
+  font-size: 0.62rem;
+  padding: 12px 14px;
+  letter-spacing: 2px;
+}
+.menu-btn:hover { filter: brightness(1.08); }
+.opt-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.opt-label { font-size: 0.5rem; color: #9ab; letter-spacing: 1px; }
+.opt-control select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.54rem;
+  padding: 10px 10px;
+  background: #0b1530;
+  border: 2px solid #1a3560;
+  color: #fff;
+}
+.opt-help {
+  font-size: 0.42rem;
+  color: #6688cc;
+  letter-spacing: 1px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+#ui.hidden { display: none; }
 </style>
 </head>
 <body>
-<h1>TANK WARS</h1>
+<div id="screen-title" class="screen show" aria-hidden="false">
+  <div class="menu-box">
+    <div class="logo logo-outline">TANK<br>WARS</div>
+    <div class="menu-sub">ARTILLERY DUEL · WIND · CRATER TERRAIN</div>
+    <div class="menu-grid">
+      <div>
+        <div class="opt-help">
+          Controls: W/S angle · A/D power · Q/E move · C ammo · Space fire
+        </div>
+        <div class="opt-help" style="margin-top:10px">
+          Standard shells are unlimited. Special ammo is limited — choose wisely.
+        </div>
+      </div>
+      <div class="menu-actions">
+        <button class="menu-btn" id="btn-quick" onclick="startQuickPlay()">QUICK PLAY</button>
+        <button class="menu-btn alt" id="btn-options" onclick="showOptions()">OPTIONS</button>
+        <button class="menu-btn ghost" id="btn-resume" onclick="resumeGame()" style="display:none">RESUME</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="screen-options" class="screen" aria-hidden="true">
+  <div class="menu-box">
+    <div class="logo" style="font-size:2.1rem; letter-spacing:7px; margin-bottom:14px">OPTIONS</div>
+    <div class="opt-row">
+      <div class="opt-label">P2</div>
+      <div class="opt-control">
+        <select id="opt-p2">
+          <option value="human">Human</option>
+          <option value="cpu">CPU</option>
+        </select>
+      </div>
+    </div>
+    <div class="opt-row">
+      <div class="opt-label">CPU</div>
+      <div class="opt-control">
+        <select id="opt-cpu"></select>
+      </div>
+    </div>
+    <div class="opt-row">
+      <div class="opt-label">Theme</div>
+      <div class="opt-control">
+        <select id="opt-theme">
+          <option value="0">GRASS</option>
+          <option value="1">DESERT</option>
+          <option value="2">ARCTIC</option>
+        </select>
+      </div>
+    </div>
+    <div class="opt-row">
+      <div class="opt-label">Turn timer</div>
+      <div class="opt-control">
+        <select id="opt-timer">
+          <option value="off">Off</option>
+          <option value="on">On</option>
+        </select>
+      </div>
+    </div>
+    <div class="opt-row">
+      <div class="opt-label">Rounds to win</div>
+      <div class="opt-control">
+        <select id="opt-rounds">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+        </select>
+      </div>
+    </div>
+    <div class="opt-row">
+      <div class="opt-label">Ammo (per player)</div>
+      <div class="opt-control">
+        <select id="opt-ammo">
+          <option value="classic" selected>Classic (Heavy x1, Cluster x3, Rico x2)</option>
+          <option value="sparring">Sparring (Heavy x1, Cluster x2, Rico x1)</option>
+          <option value="chaos">Chaos (Heavy x2, Cluster x4, Rico x3)</option>
+        </select>
+      </div>
+    </div>
+    <div class="menu-actions" style="margin-top:14px; flex-direction:row; gap:12px; justify-content:flex-end">
+      <button class="menu-btn ghost" onclick="showTitle()">BACK</button>
+      <button class="menu-btn" onclick="startFromOptions()">PLAY</button>
+    </div>
+  </div>
+</div>
+
 <div id="game-wrap">
   <canvas id="c" width="800" height="420"></canvas>
 </div>
-<div id="ui">
+<div id="ui" class="hidden">
   <div class="player-panel" id="panel1">
     <div class="panel-header">
       <span class="p1c">PLAYER 1<span class="round-pips" id="pips1"></span></span>
@@ -310,11 +507,8 @@ input[type=range]::-moz-range-thumb {
   <div id="center-panel">
     <button id="fire-btn" onclick="fire()">FIRE!</button>
     <button id="ammo-btn" onclick="cycleAmmo()">AMMO: STD</button>
-    <button id="new-game-btn" onclick="initGame()">NEW GAME</button>
-    <button id="cpu-btn" onclick="toggleCpu()">P2: HUMAN</button>
+    <button id="new-game-btn" onclick="showTitle()">MENU</button>
     <button id="mute-btn" onclick="toggleMute()">SFX: ON</button>
-    <button id="timer-btn" onclick="toggleTimer()">TIMER: OFF</button>
-    <button id="theme-btn" onclick="toggleTheme()">THEME: GRASS</button>
     <div id="move-info">MOVE: Q ◄ 60px ► E</div>
     <div id="round-info">ROUND 1</div>
     <div id="key-hint">W/S·ANGLE · A/D·POWER · Q/E·MOVE · C·AMMO · SPC·FIRE</div>
@@ -369,8 +563,8 @@ input[type=range]::-moz-range-thumb {
     </table>
   </div>
   <div class="win-btns">
-    <button class="wbtn" id="wbtn1" onclick="initGame()">REMATCH</button>
-    <button class="wbtn" id="wbtn2" onclick="initGame()">MAIN MENU</button>
+    <button class="wbtn" id="wbtn1" onclick="rematch()">REMATCH</button>
+    <button class="wbtn" id="wbtn2" onclick="showTitle()">MAIN MENU</button>
   </div>
 </div>
 
@@ -568,6 +762,7 @@ function playBounce() {
 // --- State ---
 let terrain, tanks, projectile, currentPlayer, gameOver, wind;
 let animId = null;
+let paused = false;
 let stars = [];
 let windParticles = [];
 let explosions = [];
@@ -579,6 +774,7 @@ let stats = [
 let muted = false;
 let shake = { x: 0, y: 0, intensity: 0 };
 let ammoType = 'standard'; // 'standard' | 'cluster' | 'heavy' | 'ricochet'
+let ammoInv = [{ heavy: 0, cluster: 0, ricochet: 0 }, { heavy: 0, cluster: 0, ricochet: 0 }];
 let subProjectiles = [];   // active cluster shells
 let pendingShots = 0;      // cluster shots still in flight
 let smokeTrails = [];      // lingering shot trails
@@ -586,8 +782,29 @@ let moveUsed = 0;          // pixels moved this turn
 const MOVE_BUDGET = 60;
 let roundWins = [0, 0];
 let currentRound = 1;
-const ROUNDS_TO_WIN = 2;
+let roundsToWin = 3;
 let cpuMode = false;
+let cpuProfileIdx = 0;
+
+const CPU_PROFILES = [
+  { name: 'Mr. Stupid', noiseDeg: 18, noisePwr: 16, angleStep: 8, powerStep: 20, thinkMs: 850 },
+  { name: 'Lobber', noiseDeg: 14, noisePwr: 12, angleStep: 6, powerStep: 15, thinkMs: 800 },
+  { name: 'Rifleman', noiseDeg: 10, noisePwr: 9, angleStep: 4, powerStep: 10, thinkMs: 760 },
+  { name: 'Lob & Shoot', noiseDeg: 7, noisePwr: 7, angleStep: 3, powerStep: 10, thinkMs: 720 },
+  { name: 'Windless Wit', noiseDeg: 5, noisePwr: 6, angleStep: 3, powerStep: 10, thinkMs: 680 },
+  { name: 'Twangner', noiseDeg: 4, noisePwr: 5, angleStep: 3, powerStep: 8, thinkMs: 640 },
+  { name: 'Wind Master', noiseDeg: 3, noisePwr: 4, angleStep: 2, powerStep: 8, thinkMs: 600 }
+];
+
+const AMMO_PRESETS = {
+  classic: { heavy: 1, cluster: 3, ricochet: 2 },
+  sparring: { heavy: 1, cluster: 2, ricochet: 1 },
+  chaos: { heavy: 2, cluster: 4, ricochet: 3 }
+};
+let ammoPresetKey = 'classic';
+
+// App screens
+let appScreen = 'title'; // 'title' | 'options' | 'game'
 
 // Turn timer
 let timerEnabled = false, timerActive = false, timerStart = 0;
@@ -627,9 +844,100 @@ function refreshSliders() {
   setSliderFill('power2', false);
 }
 
+function showTitle() {
+  pauseGame();
+  appScreen = 'title';
+  document.getElementById('screen-options').classList.remove('show');
+  document.getElementById('screen-title').classList.add('show');
+  document.getElementById('ui').classList.add('hidden');
+  const canResume = !gameOver && tanks && tanks.length === 2;
+  document.getElementById('btn-resume').style.display = canResume ? 'block' : 'none';
+}
+
+function showOptions() {
+  pauseGame();
+  appScreen = 'options';
+  document.getElementById('screen-title').classList.remove('show');
+  document.getElementById('screen-options').classList.add('show');
+  document.getElementById('ui').classList.add('hidden');
+}
+
+function resumeGame() {
+  if (!tanks || tanks.length !== 2 || gameOver) return;
+  appScreen = 'game';
+  document.getElementById('screen-title').classList.remove('show');
+  document.getElementById('screen-options').classList.remove('show');
+  document.getElementById('ui').classList.remove('hidden');
+  paused = false;
+  if (!animId) gameLoop();
+}
+
+function pauseGame() {
+  if (animId) { cancelAnimationFrame(animId); animId = null; }
+  paused = true;
+}
+
+function startQuickPlay() {
+  // Sensible defaults: P2 CPU (mid), grass, no timer, first to 3, classic ammo
+  cpuMode = true;
+  cpuProfileIdx = 2; // Rifleman
+  terrainTheme = 0;
+  timerEnabled = false;
+  roundsToWin = 3;
+  ammoPresetKey = 'classic';
+  startMatch();
+}
+
+function startFromOptions() {
+  const p2 = document.getElementById('opt-p2').value;
+  cpuMode = p2 === 'cpu';
+  cpuProfileIdx = parseInt(document.getElementById('opt-cpu').value, 10) || 0;
+  terrainTheme = parseInt(document.getElementById('opt-theme').value, 10) || 0;
+  timerEnabled = document.getElementById('opt-timer').value === 'on';
+  roundsToWin = parseInt(document.getElementById('opt-rounds').value, 10) || 3;
+  ammoPresetKey = document.getElementById('opt-ammo').value || 'classic';
+  startMatch();
+}
+
+function rematch() {
+  startMatch();
+}
+
+function startMatch() {
+  appScreen = 'game';
+  document.getElementById('screen-title').classList.remove('show');
+  document.getElementById('screen-options').classList.remove('show');
+  document.getElementById('ui').classList.remove('hidden');
+  initGame();
+}
+
+function initMenus() {
+  const cpuSel = document.getElementById('opt-cpu');
+  if (cpuSel && cpuSel.options.length === 0) {
+    CPU_PROFILES.forEach((p, idx) => {
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      opt.textContent = `${idx + 1}. ${p.name}`;
+      cpuSel.appendChild(opt);
+    });
+  }
+  const p2Sel = document.getElementById('opt-p2');
+  const refresh = () => {
+    const isCpu = p2Sel?.value === 'cpu';
+    if (cpuSel) cpuSel.disabled = !isCpu;
+  };
+  if (p2Sel) p2Sel.addEventListener('change', refresh);
+  refresh();
+}
+
 function initGame() {
   roundWins = [0, 0];
   currentRound = 1;
+  const preset = AMMO_PRESETS[ammoPresetKey] || AMMO_PRESETS.classic;
+  ammoInv = [
+    { heavy: preset.heavy, cluster: preset.cluster, ricochet: preset.ricochet },
+    { heavy: preset.heavy, cluster: preset.cluster, ricochet: preset.ricochet }
+  ];
   stars = Array.from({ length: 55 }, () => ({
     x: Math.random() * W,
     y: Math.random() * H * 0.58,
@@ -642,6 +950,7 @@ function initGame() {
 
 function initRound(isNewGame) {
   if (animId) { cancelAnimationFrame(animId); animId = null; }
+  paused = false;
   terrain = generateTerrain();
   wind = parseFloat(((Math.random() * 2 - 1) * 1.5).toFixed(2));
   projectile = null;
@@ -1411,6 +1720,12 @@ function fire() {
   if ((projectile || subProjectiles.length > 0) || gameOver) return;
   const t = tanks[currentPlayer];
   if (t.hp <= 0) return;
+  if (ammoType !== 'standard' && (ammoInv[currentPlayer]?.[ammoType] || 0) <= 0) {
+    ammoType = 'standard';
+    updateAmmoBtn();
+    setStatus('Out of special ammo!');
+    return;
+  }
 
   const angleEl = currentPlayer === 0 ? document.getElementById('angle1') : document.getElementById('angle2');
   const powerEl = currentPlayer === 0 ? document.getElementById('power1') : document.getElementById('power2');
@@ -1423,6 +1738,10 @@ function fire() {
   stats[currentPlayer].shots++;
   document.getElementById('fire-btn').disabled = true;
   playFire();
+  if (ammoType !== 'standard') {
+    ammoInv[currentPlayer][ammoType] = Math.max(0, (ammoInv[currentPlayer][ammoType] || 0) - 1);
+  }
+  updateAmmoBtn();
 
   if (ammoType === 'cluster') {
     // Three shells spread ±14°
@@ -1706,7 +2025,7 @@ function showWinner(winner) {
     updateRoundPips();
   }
 
-  if (winner && roundWins[winner.id] >= ROUNDS_TO_WIN) {
+  if (winner && roundWins[winner.id] >= roundsToWin) {
     // Champion — show final overlay
     cancelAnimationFrame(animId); animId = null;
     const name = `PLAYER ${winner.id + 1} WINS!`;
@@ -1763,7 +2082,10 @@ function updateUI() {
     `MOVE: Q ◄ ${Math.round(remaining)}px ► E`;
   document.getElementById('round-info').textContent =
     `ROUND ${currentRound}`;
-  if (!gameOver) setStatus(currentPlayer === 0 ? "P1's turn" : (cpuMode ? "CPU thinking..." : "P2's turn"));
+  if (!gameOver) {
+    const cpuName = CPU_PROFILES[Math.max(0, Math.min(CPU_PROFILES.length - 1, cpuProfileIdx))]?.name || 'CPU';
+    setStatus(currentPlayer === 0 ? "P1's turn" : (cpuMode ? `CPU (${cpuName}) thinking...` : "P2's turn"));
+  }
 }
 
 // Slider events
@@ -1782,14 +2104,20 @@ function updateUI() {
 function cycleAmmo() {
   if (projectile || subProjectiles.length > 0 || gameOver) return;
   const types = ['standard', 'cluster', 'heavy', 'ricochet'];
-  ammoType = types[(types.indexOf(ammoType) + 1) % types.length];
+  const start = types.indexOf(ammoType);
+  for (let i = 1; i <= types.length; i++) {
+    const t = types[(start + i) % types.length];
+    if (t === 'standard') { ammoType = t; break; }
+    if ((ammoInv[currentPlayer]?.[t] || 0) > 0) { ammoType = t; break; }
+  }
   updateAmmoBtn();
 }
 function updateAmmoBtn() {
   const labels = { standard: 'AMMO: STD', cluster: 'AMMO: CLSTR', heavy: 'AMMO: HEAVY', ricochet: 'AMMO: RICO' };
   const colors = { standard: '#ffaa22', cluster: '#44ddff', heavy: '#ff5533', ricochet: '#cc44ff' };
   const btn = document.getElementById('ammo-btn');
-  btn.textContent = labels[ammoType];
+  const count = ammoType === 'standard' ? null : (ammoInv[currentPlayer]?.[ammoType] ?? 0);
+  btn.textContent = count === null ? labels[ammoType] : `${labels[ammoType]} (${count})`;
   btn.style.color = colors[ammoType];
   btn.style.borderColor = colors[ammoType] + '66';
 }
@@ -1818,7 +2146,7 @@ function updateRoundPips() {
   [0, 1].forEach(i => {
     const el = document.getElementById(`pips${i + 1}`);
     el.innerHTML = '';
-    for (let r = 0; r < ROUNDS_TO_WIN; r++) {
+    for (let r = 0; r < roundsToWin; r++) {
       const pip = document.createElement('span');
       pip.className = 'round-pip ' + (r < roundWins[i] ? 'won' : 'empty');
       el.appendChild(pip);
@@ -1830,23 +2158,26 @@ function updateRoundPips() {
 function toggleCpu() {
   cpuMode = !cpuMode;
   const btn = document.getElementById('cpu-btn');
-  btn.textContent = cpuMode ? 'P2: CPU' : 'P2: HUMAN';
-  btn.classList.toggle('active', cpuMode);
+  if (btn) {
+    btn.textContent = cpuMode ? 'P2: CPU' : 'P2: HUMAN';
+    btn.classList.toggle('active', cpuMode);
+  }
 }
 
 function cpuTakeTurn() {
   if (gameOver) return;
-  setStatus('CPU aiming...');
+  const profile = CPU_PROFILES[Math.max(0, Math.min(CPU_PROFILES.length - 1, cpuProfileIdx))];
+  setStatus(`CPU (${profile.name}) aiming...`);
   setTimeout(() => {
     if (gameOver) return;
     const me = tanks[1];
     const target = tanks[0];
 
-    // Try powers 50-90, angles 10-170, pick combo with min approach dist
+    // Try a grid of shots; pick combo with min approach distance.
     let bestAngle = 135, bestPower = 70, bestDist = Infinity;
-    for (let pct = 50; pct <= 90; pct += 10) {
+    for (let pct = 45; pct <= 95; pct += profile.powerStep) {
       const power = pct * 0.09;
-      for (let deg = 10; deg <= 170; deg += 3) {
+      for (let deg = 10; deg <= 170; deg += profile.angleStep) {
         const angle = deg * Math.PI / 180;
         let px = me.x + Math.cos(angle) * BARREL_LEN;
         let py = (me.y - 5) - Math.sin(angle) * BARREL_LEN;
@@ -1865,9 +2196,9 @@ function cpuTakeTurn() {
       }
     }
 
-    // Add noise scaled to distance from perfect aim
-    const noiseDeg = bestAngle + (Math.random() * 22 - 11);
-    const noisePwr = bestPower + (Math.random() * 14 - 7);
+    // Add skill-based noise
+    const noiseDeg = bestAngle + (Math.random() * (profile.noiseDeg * 2) - profile.noiseDeg);
+    const noisePwr = bestPower + (Math.random() * (profile.noisePwr * 2) - profile.noisePwr);
     const finalDeg = Math.max(10, Math.min(170, Math.round(noiseDeg)));
     const finalPwr = Math.max(5, Math.min(100, Math.round(noisePwr)));
 
@@ -1878,8 +2209,8 @@ function cpuTakeTurn() {
     document.getElementById('power2val').textContent = finalPwr;
     setSliderFill('power2', false);
 
-    setTimeout(() => { if (!gameOver) fire(); }, 500);
-  }, 1000);
+    setTimeout(() => { if (!gameOver) fire(); }, 480);
+  }, profile.thinkMs);
 }
 
 // --- Keyboard shortcuts ---
@@ -1921,7 +2252,8 @@ document.addEventListener('keydown', e => {
   }
 });
 
-initGame();
+initMenus();
+showTitle();
 </script>
 </body>
 </html>
