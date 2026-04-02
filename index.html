@@ -802,12 +802,17 @@ function initRound(isNewGame) {
     { x: x2, y: terrainY(x2) - TANK_H, hp: 100, color: '#ff4da6', id: 1, vy: 0, falling: false }
   ];
 
-  document.getElementById('fire-btn').disabled = false;
   updateAmmoBtn();
   updateRoundPips();
   refreshSliders();
   updateUI();
   gameLoop();
+  // If CPU goes first this round, trigger it automatically
+  if (cpuMode && currentPlayer === 1) {
+    setTimeout(() => cpuTakeTurn(), 800);
+  } else {
+    document.getElementById('fire-btn').disabled = false;
+  }
 }
 
 // --- Terrain ---
@@ -1260,47 +1265,79 @@ function drawTrajectoryPreview() {
     return pts;
   }
 
-  const center = simulate(1.0);
-  const lo     = simulate(0.9);
-  const hi     = simulate(1.1);
-  const total  = center.length;
-
   ctx.save();
 
-  // — Center arc: dashed, full alpha at start → 0 at end —
-  for (let i = 1; i < total; i++) {
-    const prog  = i / total;
-    const alpha = Math.pow(1 - prog, 1.4) * 0.65;
-    if (alpha < 0.01) continue;
-    // Skip every 3rd pair of steps for dashed look
-    if (Math.floor(i / 3) % 2 === 1) continue;
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(center[i - 1].x, center[i - 1].y);
-    ctx.lineTo(center[i].x,     center[i].y);
-    ctx.stroke();
-  }
+  if (ammoType === 'cluster') {
+    // Show the 3 actual cluster arcs (±14° spread, 0.8× power) matching fire()
+    const spreads = [-14, 0, 14];
+    spreads.forEach(dDeg => {
+      const a = angle + dDeg * Math.PI / 180;
+      const pts = [{ x: sx, y: sy }];
+      let px = sx, py = sy;
+      let vx = Math.cos(a) * power * 0.8;
+      let vy = -Math.sin(a) * power * 0.8;
+      for (let i = 0; i < 280; i++) {
+        vy += GRAVITY; vx += wind * 0.01;
+        px += vx; py += vy;
+        if (px < -10 || px > W + 10 || py > H + 10) break;
+        if (py >= terrainY(px)) break;
+        pts.push({ x: px, y: py });
+      }
+      const n = pts.length;
+      for (let i = 1; i < n; i++) {
+        const prog = i / n;
+        const alpha = Math.pow(1 - prog, 1.4) * 0.55;
+        if (alpha < 0.01) continue;
+        if (Math.floor(i / 3) % 2 === 1) continue;
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+        ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.stroke();
+      }
+    });
+  } else {
+    const center = simulate(1.0);
+    const lo     = simulate(0.9);
+    const hi     = simulate(1.1);
+    const total  = center.length;
 
-  // — Cone edges: invisible at start, grow visible toward landing —
-  const coneStart = 0.35; // edges only appear after 35% of arc
-  [lo, hi].forEach(pts => {
-    const n = pts.length;
-    for (let i = 1; i < n; i++) {
-      const prog = i / n;
-      if (prog < coneStart) continue;
-      const alpha = Math.pow((prog - coneStart) / (1 - coneStart), 1.6) * 0.28;
+    // — Center arc: dashed, full alpha at start → 0 at end —
+    for (let i = 1; i < total; i++) {
+      const prog  = i / total;
+      const alpha = Math.pow(1 - prog, 1.4) * 0.65;
       if (alpha < 0.01) continue;
+      if (Math.floor(i / 3) % 2 === 1) continue;
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = col;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
-      ctx.lineTo(pts[i].x,     pts[i].y);
+      ctx.moveTo(center[i - 1].x, center[i - 1].y);
+      ctx.lineTo(center[i].x,     center[i].y);
       ctx.stroke();
     }
-  });
+
+    // — Cone edges: invisible at start, grow visible toward landing —
+    const coneStart = 0.35;
+    [lo, hi].forEach(pts => {
+      const n = pts.length;
+      for (let i = 1; i < n; i++) {
+        const prog = i / n;
+        if (prog < coneStart) continue;
+        const alpha = Math.pow((prog - coneStart) / (1 - coneStart), 1.6) * 0.28;
+        if (alpha < 0.01) continue;
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+        ctx.lineTo(pts[i].x,     pts[i].y);
+        ctx.stroke();
+      }
+    });
+  }
 
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -1903,6 +1940,16 @@ function updateUI() {
     `MOVE: Q ◄ ${Math.round(remaining)}px ► E`;
   document.getElementById('round-info').textContent =
     `ROUND ${currentRound}`;
+
+  // Disable all controls when it's the CPU's turn
+  const isCpuTurn = cpuMode && currentPlayer === 1;
+  document.getElementById('fire-btn').disabled = isCpuTurn;
+  document.getElementById('ammo-btn').disabled = isCpuTurn;
+  ['angle2', 'power2'].forEach(id => {
+    document.getElementById(id).disabled = isCpuTurn;
+  });
+  document.getElementById('panel2').style.opacity = isCpuTurn ? '0.55' : '1';
+
   if (!gameOver) setStatus(currentPlayer === 0 ? "P1's turn" : (cpuMode ? "CPU thinking..." : "P2's turn"));
 }
 
@@ -1988,20 +2035,23 @@ function cpuTakeTurn() {
     if (gameOver) return;
     const me = tanks[1];
     const target = tanks[0];
+
+    // Finer search grid at higher difficulty levels
+    const angleStep = cpuLevel >= 4 ? 1 : cpuLevel >= 2 ? 2 : 3;
+    const powerStep = cpuLevel >= 4 ? 3 : cpuLevel >= 2 ? 5 : 10;
+
     let bestAngle = 135, bestPower = 70, bestDist = Infinity;
-    for (let pct = 45; pct <= 95; pct += 10) {
-      // Apply wind factor: higher levels compensate for wind better
-      const effectiveWind = wind * lvl.windFactor;
-      for (let deg = 10; deg <= 170; deg += 2) {
+    for (let pct = 30; pct <= 100; pct += powerStep) {
+      const power = pct * 0.09;
+      for (let deg = 10; deg <= 170; deg += angleStep) {
         const angle = deg * Math.PI / 180;
-        const power = pct * 0.09;
         let px = me.x + Math.cos(angle) * BARREL_LEN;
         let py = (me.y - 5) - Math.sin(angle) * BARREL_LEN;
         let vx = Math.cos(angle) * power;
         let vy = -Math.sin(angle) * power;
         let minD = Infinity;
-        for (let i = 0; i < 400; i++) {
-          vy += GRAVITY; vx += effectiveWind * 0.01;
+        for (let i = 0; i < 500; i++) {
+          vy += GRAVITY; vx += wind * lvl.windFactor * 0.01;
           px += vx; py += vy;
           if (px < -20 || px > W + 20 || py > H + 20) break;
           if (py >= terrainY(px)) break;
@@ -2011,10 +2061,16 @@ function cpuTakeTurn() {
         if (minD < bestDist) { bestDist = minD; bestAngle = deg; bestPower = pct; }
       }
     }
-    // Apply noise based on difficulty
+
+    // Top level: zero noise; lower levels: proportional noise
     const noise = lvl.noise;
-    const finalDeg = Math.max(10, Math.min(170, Math.round(bestAngle + (Math.random()*noise*2 - noise))));
-    const finalPwr = Math.max(5, Math.min(100, Math.round(bestPower + (Math.random()*noise - noise/2))));
+    const finalDeg = noise === 0
+      ? bestAngle
+      : Math.max(10, Math.min(170, Math.round(bestAngle + (Math.random() * noise * 2 - noise))));
+    const finalPwr = noise === 0
+      ? bestPower
+      : Math.max(5, Math.min(100, Math.round(bestPower + (Math.random() * noise - noise / 2))));
+
     document.getElementById('angle2').value = finalDeg;
     document.getElementById('angle2val').textContent = finalDeg + '°';
     setSliderFill('angle2', false);
