@@ -437,7 +437,6 @@ input[type=range]::-moz-range-thumb {
     <div id="round-info">ROUND 1</div>
     <div id="key-hint">W/S·ANGLE · A/D·POWER · Q/E·MOVE · C·AMMO · SPC·FIRE</div>
     <div id="wind-box">
-      <div id="wind-dir">─</div>
       <div id="wind-val">WIND: +0.00</div>
     </div>
     <div id="status-msg"></div>
@@ -888,6 +887,103 @@ function tickWindParticles() {
   if (windParticles.length > 130) windParticles.splice(0, windParticles.length - 130);
 }
 
+// --- Wind sock ---
+function drawWindSock() {
+  // Pole sits top-centre of canvas
+  const poleX = W / 2;
+  const poleY = 18;
+  const poleH = 22;
+  const abs   = Math.abs(wind);
+  const str   = Math.min(1, abs / 1.5);   // 0 = calm, 1 = max
+  const dir   = wind >= 0 ? 1 : -1;       // 1 = right, -1 = left
+
+  // Wind-speed colour: blue (calm) → orange (strong)
+  const r = Math.round(80  + str * 175);
+  const g = Math.round(160 - str * 80);
+  const b = Math.round(220 - str * 140);
+  const sockCol = `rgb(${r},${g},${b})`;
+
+  ctx.save();
+
+  // Pole
+  ctx.strokeStyle = '#556688';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(poleX, poleY - poleH);
+  ctx.lineTo(poleX, poleY + 4);
+  ctx.stroke();
+
+  // Cross-bar at top
+  ctx.strokeStyle = '#778899';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(poleX - 5, poleY - poleH);
+  ctx.lineTo(poleX + 5, poleY - poleH);
+  ctx.stroke();
+
+  // Sock: droops when calm, extends horizontally when windy
+  // droop angle: 90° (straight down) at calm → 0° (horizontal) at max
+  const droopAngle = (Math.PI / 2) * (1 - str); // 0 = horiz, π/2 = down
+  const sockLen = 14 + str * 22;                 // 14px calm → 36px max
+
+  // Mouth of the sock at the pole top
+  const mx = poleX;
+  const my = poleY - poleH;
+
+  // Sock points along dir-X and down-Y
+  const tipX = mx + dir * Math.cos(droopAngle) * sockLen;
+  const tipY = my + Math.sin(droopAngle) * sockLen;
+
+  // Draw sock as a tapered shape (mouth wide, tip narrow)
+  const mouthW = 5;
+  const tipW   = 1.5;
+
+  // Perpendicular to sock direction
+  const ang = Math.atan2(tipY - my, tipX - mx);
+  const px1 =  Math.sin(ang), py1 = -Math.cos(ang);
+
+  ctx.beginPath();
+  ctx.moveTo(mx + px1 * mouthW, my + py1 * mouthW);
+  ctx.lineTo(tipX + px1 * tipW, tipY + py1 * tipW);
+  ctx.lineTo(tipX - px1 * tipW, tipY - py1 * tipW);
+  ctx.lineTo(mx - px1 * mouthW, my - py1 * mouthW);
+  ctx.closePath();
+  ctx.fillStyle = sockCol;
+  ctx.globalAlpha = 0.85;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = sockCol;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Stripes on the sock
+  const stripes = 3;
+  for (let s = 1; s <= stripes; s++) {
+    const t = s / (stripes + 1);
+    const sx = mx + (tipX - mx) * t;
+    const sy = my + (tipY - my) * t;
+    const hw = mouthW * (1 - t) + tipW * t;
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx + px1 * hw, sy + py1 * hw);
+    ctx.lineTo(sx - px1 * hw, sy - py1 * hw);
+    ctx.stroke();
+  }
+
+  // "WIND" label below pole base with numeric value
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = sockCol;
+  ctx.font = '6px "Press Start 2P"';
+  ctx.textAlign = 'center';
+  const sign = wind > 0 ? '+' : wind < 0 ? '' : '';
+  ctx.fillText(`${sign}${wind.toFixed(1)}`, poleX, poleY + 15);
+
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
 function drawWindParticles() {
   ctx.save();
   ctx.lineWidth = 1;
@@ -1060,6 +1156,7 @@ function render() {
   ctx.translate(Math.round(shake.x), Math.round(shake.y));
 
   drawWindParticles();
+  drawWindSock();
   drawSmokeTrails();
   drawTerrain();
   drawCrates();
@@ -1912,18 +2009,8 @@ function setStatus(msg) {
 }
 
 function updateWindDisplay() {
-  const abs = Math.abs(wind);
-  const count = Math.max(1, Math.min(5, Math.round(abs * 3.2)));
-  const arrow = wind >= 0 ? '►' : '◄';
-  const arrows = abs < 0.08 ? '─' : arrow.repeat(count);
-  const intensity = Math.min(1, abs / 1.5);
-  const r = Math.round(100 + intensity * 155);
-  const g = Math.round(160 - intensity * 60);
-  const b = Math.round(220 - intensity * 130);
-  const dirEl = document.getElementById('wind-dir');
-  dirEl.textContent = arrows;
-  dirEl.style.color = `rgb(${r},${g},${b})`;
-  document.getElementById('wind-val').textContent = 'WIND: ' + (wind > 0 ? '+' : '') + wind.toFixed(2);
+  const sign = wind > 0 ? '+' : '';
+  document.getElementById('wind-val').textContent = 'WIND: ' + sign + wind.toFixed(2);
 }
 
 function updateUI() {
