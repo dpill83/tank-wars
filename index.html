@@ -1420,6 +1420,28 @@ function destroyTerrain(cx, cy, radius) {
   }
 }
 
+function tankHasFallenOffWorld(t) {
+  if (t.hp <= 0) return false;
+  if (t.x < 0 || t.x >= W) return true;
+  const ix = Math.round(Math.max(0, Math.min(W - 1, t.x)));
+  const surface = terrain[ix];
+  const noStandableLand = surface >= H;
+  const feetY = t.y + TANK_H;
+  const offMapVertically = feetY >= H;
+  return noStandableLand && offMapVertically;
+}
+
+function tryResolveFallOffElimination() {
+  if (gameOver || !terrain || !tanks || tanks.length !== 2) return false;
+  const fallen = tanks.filter(tankHasFallenOffWorld);
+  if (fallen.length === 0) return false;
+  for (const t of fallen) t.hp = 0;
+  gameOver = true;
+  spawnDeathChunks(fallen[0]);
+  setTimeout(() => showWinner(tanks.find(t => t.hp > 0)), 200);
+  return true;
+}
+
 // --- Wind particles ---
 function tickWindParticles() {
   const abs = Math.abs(wind);
@@ -2090,6 +2112,7 @@ function gameLoop() {
   if (projectile) stepPhysics();
   if (subProjectiles.length > 0) stepSubPhysics();
   stepTankPhysics();
+  tryResolveFallOffElimination();
   stepCrates();
   tickDeathChunks();
   tickWindParticles();
@@ -2258,6 +2281,7 @@ function subExplode(ex, ey, hitTank) {
     const delay = hitTank ? 700 : 900;
     setTimeout(() => {
       for (const t of tanks) { if (t.falling) { t.y = terrainY(t.x) - TANK_H; t.falling = false; } }
+      if (tryResolveFallOffElimination()) return;
       updateUI();
       const dead = tanks.filter(t => t.hp <= 0);
       if (dead.length > 0) { gameOver = true; setTimeout(() => showWinner(tanks.find(t => t.hp > 0)), 200); return; }
@@ -2378,6 +2402,7 @@ function explode(ex, ey, hitTank) {
   setTimeout(() => {
     // Snap any still-falling tanks (edge case)
     for (const t of tanks) { if (t.falling) { t.y = terrainY(t.x) - TANK_H; t.falling = false; } }
+    if (tryResolveFallOffElimination()) return;
     updateUI();
     const dead = tanks.filter(t => t.hp <= 0);
     if (dead.length > 0) {
