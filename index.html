@@ -250,7 +250,56 @@ input[type=range]::-moz-range-thumb {
 #key-hint { font-size: 0.3rem; color: #2a3a4a; letter-spacing: 0.5px; text-align: center; line-height: 1.8; }
 
 #wind-box { text-align: center; line-height: 1.6; }
-#wind-dir { font-size: 0.7rem; letter-spacing: 3px; min-height: 18px; }
+#wind-dir {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  min-height: 30px;
+  --wind-sway-dur: 1.4s;
+  --wind-sway-deg: 7deg;
+  --wind-sway-deg-b: 5deg;
+  --wind-static-deg: 0deg;
+  --sock-fill: #88aacc;
+  --sock-band: rgba(255, 255, 255, 0.35);
+  --sock-outline: rgba(40, 55, 80, 0.6);
+}
+#wind-dir.wind-flip { transform: scaleX(-1); }
+#wind-dir.wind-flip .wind-sock-svg { transform: translateZ(0); }
+#wind-dir .wind-sock-svg {
+  width: 52px;
+  height: auto;
+  max-height: 34px;
+  display: block;
+  overflow: visible;
+}
+#wind-dir .wind-pole { fill: #4a5f82; }
+#wind-dir .wind-sock-a {
+  transform-origin: 11px 14px;
+  animation: windSockSwayA var(--wind-sway-dur) ease-in-out infinite alternate;
+}
+#wind-dir .wind-sock-b {
+  transform-origin: 38px 15px;
+  animation: windSockSwayB var(--wind-sway-dur) ease-in-out infinite alternate;
+  animation-delay: -0.12s;
+}
+@keyframes windSockSwayA {
+  from { transform: rotate(calc(-1 * var(--wind-sway-deg))); }
+  to { transform: rotate(var(--wind-sway-deg)); }
+}
+@keyframes windSockSwayB {
+  from { transform: rotate(calc(-1 * var(--wind-sway-deg-b))); }
+  to { transform: rotate(var(--wind-sway-deg-b)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #wind-dir .wind-sock-a,
+  #wind-dir .wind-sock-b {
+    animation: none;
+    transform: rotate(var(--wind-static-deg));
+  }
+  #wind-dir .wind-sock-b {
+    transform: rotate(calc(var(--wind-static-deg) * 0.65));
+  }
+}
 #wind-val { font-size: 0.42rem; color: #6688cc; letter-spacing: 1px; }
 #status-msg { font-size: 0.38rem; color: #334; min-height: 12px; text-align: center; }
 
@@ -615,7 +664,8 @@ button, .menu-btn, .wbtn, select {
     order: 6;
     line-height: 1.35;
   }
-  #wind-dir { font-size: 0.42rem; min-height: 12px; letter-spacing: 2px; }
+  #wind-dir { min-height: 22px; }
+  #wind-dir .wind-sock-svg { width: 40px; max-height: 26px; }
   #wind-val { font-size: 0.28rem; }
   #status-msg {
     flex: 1 1 100%;
@@ -755,7 +805,8 @@ button, .menu-btn, .wbtn, select {
     min-width: 100px;
     order: 6;
   }
-  #wind-dir { font-size: 0.45rem; min-height: 12px; }
+  #wind-dir { min-height: 24px; }
+  #wind-dir .wind-sock-svg { width: 42px; max-height: 28px; }
   #wind-val { font-size: 0.28rem; }
   #status-msg {
     flex: 1 1 100%;
@@ -897,8 +948,20 @@ button, .menu-btn, .wbtn, select {
     </div>
     <div id="round-info">ROUND 1</div>
     <div id="key-hint">W/S·ANGLE · A/D·POWER · Q/E·MOVE · C·AMMO · SPC·FIRE</div>
-    <div id="wind-box">
-      <div id="wind-dir">─</div>
+    <div id="wind-box" role="img" aria-label="Wind calm, 0.00">
+      <div id="wind-dir" aria-hidden="true">
+        <svg class="wind-sock-svg" viewBox="0 0 72 44" xmlns="http://www.w3.org/2000/svg" focusable="false">
+          <rect class="wind-pole" x="4" y="2" width="5" height="40" rx="1.5" />
+          <g class="wind-sock-a">
+            <g class="wind-sock-b">
+              <path class="wind-sock-body" fill="var(--sock-fill)" stroke="var(--sock-outline)" stroke-width="0.8"
+                d="M 12 8 L 12 24 L 52 28 Q 62 25 64 16 Q 62 7 52 4 Z" />
+              <path fill="none" stroke="var(--sock-band)" stroke-width="1.8" stroke-linecap="round"
+                d="M 14 12 L 48 15 M 15 17 L 54 19 M 16 21 L 56 22" />
+            </g>
+          </g>
+        </svg>
+      </div>
       <div id="wind-val">WIND: +0.00</div>
     </div>
     <div id="status-msg"></div>
@@ -2470,16 +2533,25 @@ function setStatus(msg) {
 
 function updateWindDisplay() {
   const abs = Math.abs(wind);
-  const count = Math.max(1, Math.min(5, Math.round(abs * 3.2)));
-  const arrow = wind >= 0 ? '►' : '◄';
-  const arrows = abs < 0.08 ? '─' : arrow.repeat(count);
+  const calm = abs < 0.08;
   const intensity = Math.min(1, abs / 1.5);
   const r = Math.round(100 + intensity * 155);
   const g = Math.round(160 - intensity * 60);
   const b = Math.round(220 - intensity * 130);
   const dirEl = document.getElementById('wind-dir');
-  dirEl.textContent = arrows;
-  dirEl.style.color = `rgb(${r},${g},${b})`;
+  const windBox = document.getElementById('wind-box');
+  dirEl.classList.toggle('wind-flip', wind < 0);
+  const durSec = calm ? 2.6 : 2.35 - intensity * 1.55;
+  const dur = `${Math.max(0.48, durSec).toFixed(2)}s`;
+  const degBase = calm ? 2.2 : 4 + intensity * 15;
+  const degB = degBase * 0.7;
+  dirEl.style.setProperty('--wind-sway-dur', dur);
+  dirEl.style.setProperty('--wind-sway-deg', `${degBase}deg`);
+  dirEl.style.setProperty('--wind-sway-deg-b', `${degB}deg`);
+  dirEl.style.setProperty('--wind-static-deg', `${(calm ? 0 : 5 + intensity * 18)}deg`);
+  dirEl.style.setProperty('--sock-fill', `rgb(${r},${g},${b})`);
+  const dirWord = wind > 0.08 ? 'to the right' : wind < -0.08 ? 'to the left' : 'calm';
+  windBox.setAttribute('aria-label', `Wind ${dirWord}, ${wind > 0 ? '+' : ''}${wind.toFixed(2)}`);
   document.getElementById('wind-val').textContent = 'WIND: ' + (wind > 0 ? '+' : '') + wind.toFixed(2);
 }
 
